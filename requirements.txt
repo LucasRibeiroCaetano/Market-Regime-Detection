@@ -1,0 +1,6 @@
+yfinance
+hmmlearn
+pandas
+numpy
+matplotlib
+matplotx
