@@ -13,6 +13,8 @@ import matplotx
 import numpy as np
 import pandas as pd
 
+import config
+
 
 plt.style.use(matplotx.styles.github["dark"])  # use the requested style
 
@@ -37,11 +39,11 @@ def save_regime_plots(price: pd.Series, regimes: Sequence[int], out_dir: str = "
     regimes = np.asarray(regimes)
 
     # Main plot: price with regime-colored line segments
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(config.PLOT_WIDTH, config.PLOT_HEIGHT))
 
-    # Fixed colors for 3 regimes: 0=Bull(green), 1=Correction(yellow), 2=Bear(red)
-    regime_colors = {0: "#00ff00", 1: "#ffff00", 2: "#ff0000"}
-    regime_labels = {0: "Bull Market", 1: "Correction", 2: "Bear Market"}
+    # Use configured regime colors and labels
+    regime_colors = config.REGIME_COLORS
+    regime_labels = config.REGIME_LABELS
     
     # Override with custom names if provided
     if state_names is not None:
@@ -82,7 +84,7 @@ def save_regime_plots(price: pd.Series, regimes: Sequence[int], out_dir: str = "
     ax.set_yscale("log")
     ax.legend(loc="upper left")
     regime_plot_path = os.path.join(out_dir, "regime_plot.png")
-    fig.savefig(regime_plot_path, dpi=300, bbox_inches="tight")
+    fig.savefig(regime_plot_path, dpi=config.PLOT_DPI, bbox_inches="tight")
     plt.close(fig)
 
     # Secondary plot: regime distribution (pie chart without labels on slices)
@@ -99,5 +101,5 @@ def save_regime_plots(price: pd.Series, regimes: Sequence[int], out_dir: str = "
     ax2.legend(wedges, labels, title="Regimes", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
     ax2.set_title("Regime Distribution")
     dist_plot_path = os.path.join(out_dir, "regime_distribution.png")
-    fig2.savefig(dist_plot_path, dpi=300, bbox_inches="tight")
+    fig2.savefig(dist_plot_path, dpi=config.PLOT_DPI, bbox_inches="tight")
     plt.close(fig2)

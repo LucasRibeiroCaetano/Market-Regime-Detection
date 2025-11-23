@@ -13,6 +13,8 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+import config
+
 
 def load_and_classify(ticker: str = "^GSPC", start: str = "2000-01-01", end: str = None) -> Tuple[pd.Series, np.ndarray]:
     """Download weekly SPX data and classify regimes based on 50W SMA.
@@ -45,16 +47,16 @@ def load_and_classify(ticker: str = "^GSPC", start: str = "2000-01-01", end: str
     else:
         price = data["Close"].dropna()
     
-    # Compute 50-week SMA
-    sma_50 = price.rolling(window=50).mean()
+    # Compute SMA using configured window
+    sma = price.rolling(window=config.SMA_WINDOW).mean()
     
     # Drop initial NaN period from SMA calculation first
-    valid_mask = sma_50.notna()
+    valid_mask = sma.notna()
     price_clean = price[valid_mask].copy()
-    sma_50_clean = sma_50[valid_mask].copy()
+    sma_clean = sma[valid_mask].copy()
     
     # Determine if price is above/below SMA
-    above_sma = (price_clean >= sma_50_clean).values
+    above_sma = (price_clean >= sma_clean).values
     below_sma = ~above_sma
     
     # Count consecutive weeks below SMA
@@ -90,11 +92,11 @@ def load_and_classify(ticker: str = "^GSPC", start: str = "2000-01-01", end: str
         weeks_above = consecutive_weeks_above[i]
         
         # Check if we enter bear market
-        if weeks_below >= 10:
+        if weeks_below >= config.BEAR_MARKET_THRESHOLD:
             in_bear_market = True
         
-        # Check if we exit bear market (need 4 consecutive weeks above SMA)
-        if in_bear_market and weeks_above >= 4:
+        # Check if we exit bear market
+        if in_bear_market and weeks_above >= config.BEAR_EXIT_CONFIRMATION:
             in_bear_market = False
         
         # Assign regime based on state
