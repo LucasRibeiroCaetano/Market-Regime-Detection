@@ -1,5 +1,7 @@
 # Market Regime Detection
 
+A Python tool for identifying bull markets, corrections, and bear markets using a rule-based approach with the 50-week Simple Moving Average. This project provides clear visual analysis of market regimes spanning from the S&P 500's inception (1946) to the present day, helping investors and analysts understand long-term market cycles and trend changes.
+
 ## Showcase
 
 Placeholders for generated images:
