@@ -4,8 +4,6 @@ A Python tool for identifying bull markets, corrections, and bear markets using 
 
 ## Showcase
 
-Placeholders for generated images:
-
 ![Regime Plot](plots/regime_plot.png)
 ![Regime Distribution](plots/regime_distribution.png)
 
