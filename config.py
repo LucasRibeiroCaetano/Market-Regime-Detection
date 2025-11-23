@@ -8,10 +8,12 @@ import datetime
 
 # Default data parameters
 DEFAULT_TICKER = "^GSPC"  # S&P 500 index
-DEFAULT_START_DATE = "1946-05-21"  # S&P 500 inception date
+DEFAULT_START_DATE = "1946-05-21"  # S&P 500 inception date (used as calculation baseline)
 DEFAULT_END_DATE = datetime.date.today().isoformat()
 
 # Regime detection parameters
+# NOTE: Data is always loaded from DEFAULT_START_DATE to ensure consistent SMA and regime
+# calculations. The start parameter in CLI only affects what date range is displayed.
 SMA_WINDOW = 50  # Number of weeks for Simple Moving Average
 BEAR_MARKET_THRESHOLD = 10  # Consecutive weeks below SMA to declare bear market
 BEAR_EXIT_CONFIRMATION = 4  # Consecutive weeks above SMA required to exit bear market

@@ -18,13 +18,16 @@ import config
 
 def load_and_classify(ticker: str = "^GSPC", start: str = "2000-01-01", end: str = None) -> Tuple[pd.Series, np.ndarray]:
     """Download weekly SPX data and classify regimes based on 50W SMA.
+    
+    Always downloads data from the historical start (1946) to ensure consistent SMA and regime
+    calculations, then filters to the requested date range for display.
 
     Parameters
     ----------
     ticker : str
         Asset ticker (default: ^GSPC for SPX)
     start : str
-        Start date (YYYY-MM-DD)
+        Start date for displaying results (YYYY-MM-DD) - data will be calculated from 1946
     end : str
         End date (YYYY-MM-DD), defaults to today
 
@@ -38,8 +41,12 @@ def load_and_classify(ticker: str = "^GSPC", start: str = "2000-01-01", end: str
         1 = Correction (yellow)
         2 = Bear Market (red)
     """
-    # Download weekly data
-    data = yf.download(ticker, start=start, end=end, interval="1wk", progress=False)
+    # Store the requested start date for filtering later
+    requested_start = pd.Timestamp(start) if start else None
+    
+    # Always download from historical start to ensure consistent SMA and regime calculations
+    # This ensures the 50W SMA and regime states are computed with full historical context
+    data = yf.download(ticker, start=config.DEFAULT_START_DATE, end=end, interval="1wk", progress=False)
     
     # Get adjusted close
     if "Adj Close" in data.columns:
@@ -106,5 +113,11 @@ def load_and_classify(ticker: str = "^GSPC", start: str = "2000-01-01", end: str
             regimes[i] = 1  # Correction (below SMA but not bear)
         else:
             regimes[i] = 0  # Bull Market (above SMA)
+    
+    # Filter to requested date range if specified
+    if requested_start is not None:
+        mask = price_clean.index >= requested_start
+        price_clean = price_clean[mask]
+        regimes = regimes[mask if isinstance(mask, np.ndarray) else mask.values]
     
     return price_clean, regimes
