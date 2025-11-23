@@ -1,8 +1,9 @@
-"""Data loader and preprocessing utilities.
+"""Data loader and regime classification using 50-week SMA rule.
 
-Downloads price and VIX from yfinance, computes log returns for the asset and a
-standardized VIX log-level. Returns aligned, standardized features for the HMM
-and the original price series (adjusted close) for plotting.
+Downloads weekly SPX data, computes 50-week SMA, and classifies regimes:
+- Bull Market (0): Price above 50W SMA (or exited bear with 4+ consecutive weeks above)
+- Correction (1): Price below 50W SMA for <10 consecutive weeks
+- Bear Market (2): Price below 50W SMA for >=10 consecutive weeks (exit requires 4 consecutive weeks above)
 """
 from __future__ import annotations
 
@@ -13,49 +14,95 @@ import pandas as pd
 import yfinance as yf
 
 
-def load_and_preprocess(ticker: str = "SPY", vix_ticker: str = "^VIX", start: str = "2000-01-01", end: str = None) -> Tuple[np.ndarray, pd.Series]:
-    """Download data and return standardized features and price series.
+def load_and_classify(ticker: str = "^GSPC", start: str = "2000-01-01", end: str = None) -> Tuple[pd.Series, np.ndarray]:
+    """Download weekly SPX data and classify regimes based on 50W SMA.
+
+    Parameters
+    ----------
+    ticker : str
+        Asset ticker (default: ^GSPC for SPX)
+    start : str
+        Start date (YYYY-MM-DD)
+    end : str
+        End date (YYYY-MM-DD), defaults to today
 
     Returns
     -------
-    features : np.ndarray
-        2D array with columns [asset_log_return, vix_standardized_log]
     price_series : pd.Series
-        Adjusted close price series aligned with the features (index = DatetimeIndex)
+        Weekly adjusted close price series (index = DatetimeIndex)
+    regimes : np.ndarray
+        1D array of regime labels:
+        0 = Bull Market (green)
+        1 = Correction (yellow)
+        2 = Bear Market (red)
     """
-    # Download adjusted close price for asset and vix close
-    data = yf.download([ticker, vix_ticker], start=start, end=end, progress=False)
-
-    # Adjusted close may be under column 'Adj Close' for assets, VIX has 'Close'
-    if ("Adj Close" in data.columns.get_level_values(0)):
-        price = data[('Adj Close', ticker)].dropna()
+    # Download weekly data
+    data = yf.download(ticker, start=start, end=end, interval="1wk", progress=False)
+    
+    # Get adjusted close
+    if "Adj Close" in data.columns:
+        price = data["Adj Close"].dropna()
     else:
-        price = data[('Close', ticker)].dropna()
-
-    # VIX series — prefer 'Close' column
-    try:
-        vix = data[('Close', vix_ticker)].dropna()
-    except Exception:
-        # fallback if single-column returned
-        vix = data[vix_ticker].dropna()
-
-    # Compute log returns for the asset
-    asset_log = np.log(price).diff()
-
-    # Compute log of VIX level and then standardize (z-score)
-    vix_log = np.log(vix).replace([np.inf, -np.inf], np.nan)
-
-    # Align series
-    df = pd.concat([asset_log, vix_log], axis=1)
-    df.columns = ["asset_log_return", "vix_log"]
-
-    # Drop NaNs created by diff/log
-    df = df.dropna()
-
-    # Standardize features (mean 0, std 1)
-    features = (df - df.mean()) / df.std()
-
-    # Return numpy array for HMM and the aligned price series (slice to same index)
-    aligned_price = price.reindex(df.index)
-
-    return features.values, aligned_price
+        price = data["Close"].dropna()
+    
+    # Compute 50-week SMA
+    sma_50 = price.rolling(window=50).mean()
+    
+    # Drop initial NaN period from SMA calculation first
+    valid_mask = sma_50.notna()
+    price_clean = price[valid_mask].copy()
+    sma_50_clean = sma_50[valid_mask].copy()
+    
+    # Determine if price is above/below SMA
+    above_sma = (price_clean >= sma_50_clean).values
+    below_sma = ~above_sma
+    
+    # Count consecutive weeks below SMA
+    consecutive_weeks_below = np.zeros(len(price_clean), dtype=int)
+    counter = 0
+    
+    for i in range(len(below_sma)):
+        if below_sma[i]:
+            counter += 1
+            consecutive_weeks_below[i] = counter
+        else:
+            counter = 0
+            consecutive_weeks_below[i] = 0
+    
+    # Count consecutive weeks above SMA (needed for bear market exit)
+    consecutive_weeks_above = np.zeros(len(price_clean), dtype=int)
+    counter = 0
+    
+    for i in range(len(above_sma)):
+        if above_sma[i]:
+            counter += 1
+            consecutive_weeks_above[i] = counter
+        else:
+            counter = 0
+            consecutive_weeks_above[i] = 0
+    
+    # Classify regimes (bull/correction/bear) with bear market exit rule
+    regimes = np.zeros(len(price_clean), dtype=int)
+    in_bear_market = False
+    
+    for i in range(len(regimes)):
+        weeks_below = consecutive_weeks_below[i]
+        weeks_above = consecutive_weeks_above[i]
+        
+        # Check if we enter bear market
+        if weeks_below >= 10:
+            in_bear_market = True
+        
+        # Check if we exit bear market (need 4 consecutive weeks above SMA)
+        if in_bear_market and weeks_above >= 4:
+            in_bear_market = False
+        
+        # Assign regime based on state
+        if in_bear_market:
+            regimes[i] = 2  # Bear Market
+        elif weeks_below > 0:
+            regimes[i] = 1  # Correction (below SMA but not bear)
+        else:
+            regimes[i] = 0  # Bull Market (above SMA)
+    
+    return price_clean, regimes

@@ -1,5 +1,4 @@
 yfinance
-hmmlearn
 pandas
 numpy
 matplotlib

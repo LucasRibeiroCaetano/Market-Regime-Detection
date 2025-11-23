@@ -17,7 +17,7 @@ import pandas as pd
 plt.style.use(matplotx.styles.github["dark"])  # use the requested style
 
 
-def save_regime_plots(price: pd.Series, regimes: Sequence[int], out_dir: str = "plots") -> None:
+def save_regime_plots(price: pd.Series, regimes: Sequence[int], out_dir: str = "plots", state_names: dict[int, str] | None = None) -> None:
     """Create and save regime plots.
 
     Parameters
@@ -36,20 +36,50 @@ def save_regime_plots(price: pd.Series, regimes: Sequence[int], out_dir: str = "
     price_vals = price.values
     regimes = np.asarray(regimes)
 
-    # Main plot: price with regime-colored scatter
+    # Main plot: price with regime-colored line segments
     fig, ax = plt.subplots(figsize=(12, 6))
-    ax.plot(dates, price_vals, color="#c9d1d9", linewidth=1.0, alpha=0.8)
 
-    # Choose colors for regimes
-    cmap = plt.get_cmap("tab10")
+    # Fixed colors for 3 regimes: 0=Bull(green), 1=Correction(yellow), 2=Bear(red)
+    regime_colors = {0: "#00ff00", 1: "#ffff00", 2: "#ff0000"}
+    regime_labels = {0: "Bull Market", 1: "Correction", 2: "Bear Market"}
+    
+    # Override with custom names if provided
+    if state_names is not None:
+        regime_labels.update(state_names)
+    
+    # Plot line segments by regime, including connecting points at transitions
+    # Group consecutive indices with the same regime to create continuous line segments
     unique_states = np.unique(regimes)
-
-    for i, state in enumerate(unique_states):
-        mask = regimes == state
-        ax.scatter(dates[mask], price_vals[mask], s=10, color=cmap(i), label=f"Regime {state}")
+    plotted_labels = set()
+    
+    i = 0
+    while i < len(regimes):
+        current_regime = regimes[i]
+        color = regime_colors.get(int(current_regime), "#888888")
+        label = regime_labels.get(int(current_regime), f"Regime {current_regime}")
+        
+        # Find the end of this regime segment
+        j = i
+        while j < len(regimes) and regimes[j] == current_regime:
+            j += 1
+        
+        # Plot this segment (include one extra point at the end for smooth transition)
+        end_idx = min(j + 1, len(dates))
+        segment_dates = dates[i:end_idx]
+        segment_prices = price_vals[i:end_idx]
+        
+        # Only add label once per regime type
+        if label not in plotted_labels:
+            ax.plot(segment_dates, segment_prices, color=color, linewidth=2.0, label=label)
+            plotted_labels.add(label)
+        else:
+            ax.plot(segment_dates, segment_prices, color=color, linewidth=2.0)
+        
+        i = j
 
     ax.set_title("Asset Price with Detected Regimes")
-    ax.set_ylabel("Price")
+    ax.set_ylabel("Price (Log Scale)")
+    ax.set_yscale("log")
     ax.legend(loc="upper left")
     regime_plot_path = os.path.join(out_dir, "regime_plot.png")
     fig.savefig(regime_plot_path, dpi=300, bbox_inches="tight")
@@ -57,11 +87,14 @@ def save_regime_plots(price: pd.Series, regimes: Sequence[int], out_dir: str = "
 
     # Secondary plot: regime distribution (pie chart without labels on slices)
     counts = Counter(regimes.tolist())
-    labels = [f"Regime {s}: {counts[s]}" for s in sorted(counts.keys())]
-    sizes = [counts[s] for s in sorted(counts.keys())]
+    sorted_states = sorted(counts.keys())
+    total = sum(counts.values())
+    labels = [f"{regime_labels.get(int(s), f'Regime {s}')}: {100*counts[s]/total:.1f}%" for s in sorted_states]
+    sizes = [counts[s] for s in sorted_states]
+    colors = [regime_colors.get(int(s), "#888888") for s in sorted_states]
 
     fig2, ax2 = plt.subplots(figsize=(6, 6))
-    wedges, _ = ax2.pie(sizes, labels=None, startangle=90, colors=[cmap(i) for i in range(len(sizes))])
+    wedges, _ = ax2.pie(sizes, labels=None, startangle=90, colors=colors)
     # Use legend instead of direct labels on slices
     ax2.legend(wedges, labels, title="Regimes", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
     ax2.set_title("Regime Distribution")
